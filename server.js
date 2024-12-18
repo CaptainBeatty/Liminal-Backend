@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
 
 const photoRoutes = require('./routes/photoRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 dotenv.config();
 
@@ -15,6 +16,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use('/uploads', express.static('uploads')); // Static folder for uploaded images
 app.use('/api/photos', photoRoutes);
+app.use('/api/auth', authRoutes);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, {
