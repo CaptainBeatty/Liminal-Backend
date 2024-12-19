@@ -1,9 +1,12 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const authenticate = require('../middleware/authenticate'); // Importer le middleware
 const Photo = require('../models/Photo');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
+
 
 // Route pour uploader une image (existe déjà)
 const multer = require('multer');
@@ -17,16 +20,16 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// POST : Ajouter une nouvelle photo
-router.post('/', upload.single('image'), async (req, res) => {
+// Route pour ajouter une image
+router.post('/', authenticate, upload.single('image'), async (req, res) => {
   try {
     const { title } = req.body;
     const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-    const newPhoto = new Photo({ title, imageUrl });
+    const newPhoto = new Photo({ title, imageUrl, userId: req.user.id }); // Associer l'utilisateur
     await newPhoto.save();
     res.status(201).json(newPhoto);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur lors du téléchargement' });
+    res.status(500).json({ error: 'Erreur lors de l\'ajout de la photo' });
   }
 });
 
@@ -40,61 +43,53 @@ router.get('/', async (req, res) => {
   }
 });
 
-// DELETE : Supprimer une photo par ID
-router.delete('/:id', async (req, res) => {
+// Route pour supprimer une photo
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     const photo = await Photo.findById(req.params.id);
-    if (!photo) {
-      return res.status(404).json({ error: 'Photo non trouvée' });
+    if (!photo) return res.status(404).json({ error: 'Photo non trouvée' });
+
+    // Vérification si l'utilisateur est le propriétaire
+    if (photo.userId.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Accès interdit : Vous n\'êtes pas le propriétaire de cette image' });
     }
 
-    // Supprimer le fichier image du dossier "uploads"
+    // Supprimer l'image du dossier et de la base de données
     const filePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
-    fs.unlink(filePath, async (err) => {
-      if (err) {
-        console.error('Erreur lors de la suppression du fichier :', err);
-        return res.status(500).json({ error: 'Erreur lors de la suppression du fichier' });
-      }
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
-      // Supprimer l'entrée de la base de données
-      await Photo.findByIdAndDelete(req.params.id);
-      res.status(200).json({ message: 'Photo supprimée avec succès' });
-    });
+    await Photo.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Photo supprimée avec succès' });
   } catch (err) {
     res.status(500).json({ error: 'Erreur lors de la suppression de la photo' });
   }
 });
 
-// PUT : Modifier une photo par ID (titre et/ou image)
-router.put('/:id', upload.single('image'), async (req, res) => {
+
+// Route pour modifier une photo
+router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
   try {
     const photo = await Photo.findById(req.params.id);
-    if (!photo) {
-      return res.status(404).json({ error: 'Photo non trouvée' });
+    if (!photo) return res.status(404).json({ error: 'Photo non trouvée' });
+
+    // Vérification si l'utilisateur est le propriétaire
+    if (photo.userId.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Accès interdit : Vous n\'êtes pas le propriétaire de cette image' });
     }
 
-    // Mise à jour du titre
-    if (req.body.title) {
-      photo.title = req.body.title;
-    }
+    // Mettre à jour le titre
+    if (req.body.title) photo.title = req.body.title;
 
     // Remplacer l'image si une nouvelle est uploadée
     if (req.file) {
-      // Supprimer l'ancienne image
-      const oldFilePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
-      if (fs.existsSync(oldFilePath)) {
-        fs.unlinkSync(oldFilePath);
-      }
-
-      // Mettre à jour l'URL de la nouvelle image
+      const filePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       photo.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     }
 
-    // Enregistrer les modifications
     await photo.save();
     res.status(200).json(photo);
   } catch (err) {
-    console.error('Erreur lors de la modification :', err);
     res.status(500).json({ error: 'Erreur lors de la modification de la photo' });
   }
 });
