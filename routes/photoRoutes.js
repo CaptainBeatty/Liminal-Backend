@@ -23,9 +23,9 @@ const upload = multer({ storage });
 // Route pour ajouter une image
 router.post('/', authenticate, upload.single('image'), async (req, res) => {
   try {
-    const { title } = req.body;
+    const { title, cameraType } = req.body;
     const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-    const newPhoto = new Photo({ title, imageUrl, userId: req.user.id }); // Associer l'utilisateur
+    const newPhoto = new Photo({ title, imageUrl, userId: req.user.id, cameraType,}); // Associer l'utilisateur
     await newPhoto.save();
     res.status(201).json(newPhoto);
   } catch (err) {
@@ -67,30 +67,35 @@ router.delete('/:id', authenticate, async (req, res) => {
 
 
 // Route pour modifier une photo
+// Route PUT pour mettre à jour une photo
 router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
   try {
+    const { title, cameraType } = req.body; // Récupérer les champs mis à jour
     const photo = await Photo.findById(req.params.id);
-    if (!photo) return res.status(404).json({ error: 'Photo non trouvée' });
 
-    // Vérification si l'utilisateur est le propriétaire
-    if (photo.userId.toString() !== req.user.id) {
-      return res.status(403).json({ error: 'Accès interdit : Vous n\'êtes pas le propriétaire de cette image' });
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo non trouvée.' });
     }
 
-    // Mettre à jour le titre
-    if (req.body.title) photo.title = req.body.title;
+    // Vérifier si l'utilisateur est le propriétaire de la photo
+    if (photo.userId.toString() !== req.user.id) {
+      return res.status(403).json({ error: 'Accès refusé.' });
+    }
 
-    // Remplacer l'image si une nouvelle est uploadée
+    // Mettre à jour les champs
+    if (title) photo.title = title;
+    if (cameraType) photo.cameraType = cameraType; // Mettre à jour le type d'appareil photo
+
+    // Mettre à jour l'image si un nouveau fichier est envoyé
     if (req.file) {
-      const filePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       photo.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     }
 
     await photo.save();
     res.status(200).json(photo);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur lors de la modification de la photo' });
+    console.error('Erreur lors de la mise à jour de la photo :', err);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour de la photo.' });
   }
 });
 
