@@ -1,9 +1,9 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const authenticate = require('../middleware/authenticate'); // Importer le middleware
+const authenticate = require('../middleware/authenticate'); // Middleware d'authentification
 const Photo = require('../models/Photo');
-const jwt = require('jsonwebtoken');
+const dayjs = require('dayjs'); // Importer Day.js pour le formatage des dates
 
 const router = express.Router();
 
@@ -22,14 +22,30 @@ const upload = multer({ storage });
 // **Route POST : Ajouter une image**
 router.post('/', authenticate, upload.single('image'), async (req, res) => {
   try {
-    const { title, cameraType } = req.body;
+    const { title, cameraType, date } = req.body;
+
+    // Validation des champs requis
+    if (!title || !date || !req.file) {
+      return res.status(400).json({ error: 'Les champs "title", "date" et "image" sont obligatoires.' });
+    }
+
+    // Validation et formatage de la date
+    const isValidDate = dayjs(date, 'YYYY-MM-DD', true).isValid();
+    if (!isValidDate) {
+      return res.status(400).json({ error: 'Le format de la date est invalide. Utilisez "AAAA-MM-JJ".' });
+    }
+
+    const formattedDate = dayjs(date, 'YYYY-MM-DD').format('DD/MM/YYYY');
+
     const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     const newPhoto = new Photo({
       title,
-      imageUrl,
-      userId: req.user.id, // Associer la photo à l'utilisateur connecté
       cameraType,
+      date: formattedDate, // Sauvegarder la date formatée
+      imageUrl,
+      userId: req.user.id, // Associer l'utilisateur connecté
     });
+
     await newPhoto.save();
     res.status(201).json(newPhoto);
   } catch (err) {
@@ -42,7 +58,14 @@ router.post('/', authenticate, upload.single('image'), async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const photos = await Photo.find();
-    res.status(200).json(photos);
+
+    // Formatage des dates avant l'envoi
+    const formattedPhotos = photos.map((photo) => ({
+      ...photo.toObject(),
+      date: photo.date ? dayjs(photo.date, 'DD/MM/YYYY').format('DD/MM/YYYY') : 'Non spécifiée',
+    }));
+
+    res.status(200).json(formattedPhotos);
   } catch (err) {
     console.error('Erreur lors de la récupération des photos :', err);
     res.status(500).json({ error: 'Erreur lors de la récupération des photos' });
@@ -52,13 +75,21 @@ router.get('/', async (req, res) => {
 // **Route GET : Récupérer une photo par son ID**
 router.get('/:id', async (req, res) => {
   try {
-    const photo = await Photo.findById(req.params.id);
+    const photo = await Photo.findById(req.params.id).populate('userId', 'username'); // Remplace 'username' par le champ contenant le nom d'utilisateur
 
     if (!photo) {
       return res.status(404).json({ error: 'Photo non trouvée.' });
     }
+    console.log('Date brute depuis la base :', photo.date); // Vérifiez le format ici
+    // Formatage de la date avant l'envoi
+    const formattedPhoto = {
+      ...photo.toObject(),
+      userId: photo.userId._id, // Inclure l'ID utilisateur
+      authorName: photo.userId.username, // Inclure le nom de l'auteur
+      date: photo.date ? dayjs(photo.date, 'DD/MM/YYYY').format('DD/MM/YYYY') : 'Non spécifiée',
+    };
 
-    res.status(200).json(photo);
+    res.status(200).json(formattedPhoto);
   } catch (err) {
     console.error('Erreur lors de la récupération de la photo :', err);
     res.status(500).json({ error: 'Erreur lors de la récupération de la photo.' });
@@ -95,7 +126,7 @@ router.delete('/:id', authenticate, async (req, res) => {
 // **Route PUT : Mettre à jour une photo**
 router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
   try {
-    const { title, cameraType } = req.body;
+    const { title, cameraType, date } = req.body;
     const photo = await Photo.findById(req.params.id);
 
     if (!photo) {
@@ -111,9 +142,16 @@ router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
     if (title) photo.title = title;
     if (cameraType) photo.cameraType = cameraType;
 
+    if (date) {
+      const isValidDate = dayjs(date, 'YYYY-MM-DD', true).isValid();
+      if (!isValidDate) {
+        return res.status(400).json({ error: 'Le format de la date est invalide. Utilisez "AAAA-MM-JJ".' });
+      }
+      photo.date = dayjs(date, 'YYYY-MM-DD').format('DD/MM/YYYY'); // Mettre à jour la date formatée
+    }
+
     // Mettre à jour l'image si un nouveau fichier est envoyé
     if (req.file) {
-      // Supprimer l'ancienne image si elle existe
       const oldFilePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
       if (fs.existsSync(oldFilePath)) {
         fs.unlinkSync(oldFilePath);
