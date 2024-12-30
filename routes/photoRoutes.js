@@ -3,7 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const authenticate = require('../middleware/authenticate'); // Middleware d'authentification
 const Photo = require('../models/Photo');
-const dayjs = require('dayjs'); // Importer Day.js pour le formatage des dates
+const dayjs = require('dayjs');
+const customParseFormat = require('dayjs/plugin/customParseFormat');
+
+dayjs.extend(customParseFormat);
 
 const router = express.Router();
 
@@ -29,19 +32,19 @@ router.post('/', authenticate, upload.single('image'), async (req, res) => {
       return res.status(400).json({ error: 'Les champs "title", "date" et "image" sont obligatoires.' });
     }
 
-    // Validation et formatage de la date
-    const isValidDate = dayjs(date, 'YYYY-MM-DD', true).isValid();
+    // Validation et conversion de la date
+    const isValidDate = dayjs(date, ['YYYY-MM-DD', 'D MMMM YYYY'], true).isValid();
     if (!isValidDate) {
-      return res.status(400).json({ error: 'Le format de la date est invalide. Utilisez "AAAA-MM-JJ".' });
+      return res.status(400).json({ error: 'Le format de la date est invalide. Utilisez "AAAA-MM-JJ" ou "4 juillet 1985".' });
     }
 
-    const formattedDate = dayjs(date, 'YYYY-MM-DD').format('DD/MM/YYYY');
+    const formattedDate = dayjs(date, ['YYYY-MM-DD', 'D MMMM YYYY'], true).format('D MMMM YYYY');
 
     const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     const newPhoto = new Photo({
       title,
       cameraType,
-      date: formattedDate, // Sauvegarder la date formatée
+      date: formattedDate,
       imageUrl,
       userId: req.user.id, // Associer l'utilisateur connecté
     });
@@ -59,10 +62,9 @@ router.get('/', async (req, res) => {
   try {
     const photos = await Photo.find();
 
-    // Formatage des dates avant l'envoi
     const formattedPhotos = photos.map((photo) => ({
       ...photo.toObject(),
-      date: photo.date ? dayjs(photo.date, 'DD/MM/YYYY').format('DD/MM/YYYY') : 'Non spécifiée',
+      date: dayjs(photo.date, ['D MMMM YYYY', 'YYYY-MM-DD']).format('D MMMM YYYY'),
     }));
 
     res.status(200).json(formattedPhotos);
@@ -75,18 +77,17 @@ router.get('/', async (req, res) => {
 // **Route GET : Récupérer une photo par son ID**
 router.get('/:id', async (req, res) => {
   try {
-    const photo = await Photo.findById(req.params.id).populate('userId', 'username'); // Remplace 'username' par le champ contenant le nom d'utilisateur
+    const photo = await Photo.findById(req.params.id).populate('userId', 'username');
 
     if (!photo) {
       return res.status(404).json({ error: 'Photo non trouvée.' });
     }
-    console.log('Date brute depuis la base :', photo.date); // Vérifiez le format ici
-    // Formatage de la date avant l'envoi
+
     const formattedPhoto = {
       ...photo.toObject(),
-      userId: photo.userId._id, // Inclure l'ID utilisateur
-      authorName: photo.userId.username, // Inclure le nom de l'auteur
-      date: photo.date ? dayjs(photo.date, 'DD/MM/YYYY').format('DD/MM/YYYY') : 'Non spécifiée',
+      userId: photo.userId._id,
+      authorName: photo.userId.username,
+      date: dayjs(photo.date, ['D MMMM YYYY', 'YYYY-MM-DD']).format('D MMMM YYYY'),
     };
 
     res.status(200).json(formattedPhoto);
@@ -104,12 +105,10 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Photo non trouvée' });
     }
 
-    // Vérifier si l'utilisateur est le propriétaire de la photo
     if (photo.userId.toString() !== req.user.id) {
       return res.status(403).json({ error: 'Accès interdit : Vous n\'êtes pas le propriétaire de cette image' });
     }
 
-    // Supprimer l'image du dossier et de la base de données
     const filePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
@@ -133,24 +132,21 @@ router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
       return res.status(404).json({ error: 'Photo non trouvée.' });
     }
 
-    // Vérifier si l'utilisateur est le propriétaire de la photo
     if (photo.userId.toString() !== req.user.id) {
       return res.status(403).json({ error: 'Accès refusé.' });
     }
 
-    // Mettre à jour les champs
     if (title) photo.title = title;
     if (cameraType) photo.cameraType = cameraType;
 
     if (date) {
-      const isValidDate = dayjs(date, 'YYYY-MM-DD', true).isValid();
+      const isValidDate = dayjs(date, ['YYYY-MM-DD', 'D MMMM YYYY'], true).isValid();
       if (!isValidDate) {
-        return res.status(400).json({ error: 'Le format de la date est invalide. Utilisez "AAAA-MM-JJ".' });
+        return res.status(400).json({ error: 'Le format de la date est invalide. Utilisez "AAAA-MM-JJ" ou "4 juillet 1985".' });
       }
-      photo.date = dayjs(date, 'YYYY-MM-DD').format('DD/MM/YYYY'); // Mettre à jour la date formatée
+      photo.date = dayjs(date, ['YYYY-MM-DD', 'D MMMM YYYY'], true).format('D MMMM YYYY');
     }
 
-    // Mettre à jour l'image si un nouveau fichier est envoyé
     if (req.file) {
       const oldFilePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
       if (fs.existsSync(oldFilePath)) {
@@ -158,6 +154,8 @@ router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
       }
       photo.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     }
+
+    
 
     await photo.save();
     res.status(200).json(photo);
