@@ -3,20 +3,23 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const User = require('../models/User');
+require('dotenv').config(); // Charger les variables d'environnement
 
 const router = express.Router();
 
-// Transporter Nodemailer (configurez avec vos informations)
+// Configurer Nodemailer avec les variables d'environnement
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'juliengrange.dev@gmail.com', // Votre email
-    pass: 'xddd itru gzrd pgqw', // Remplacez par le mot de passe de votre email
+    user: process.env.EMAIL_USER, // Email depuis les variables d'environnement
+    pass: process.env.EMAIL_PASS, // Mot de passe depuis les variables d'environnement
   },
 });
 
-// Secret pour le token de réinitialisation
-const RESET_SECRET = 'reset_secret_key';
+// Utiliser les secrets depuis les variables d'environnement
+const RESET_SECRET = process.env.RESET_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // Register Route
 router.post('/register', async (req, res) => {
@@ -36,7 +39,27 @@ router.post('/register', async (req, res) => {
     const newUser = new User({ username, email, password: hashedPassword });
     await newUser.save();
 
-    res.status(201).json({ message: 'Utilisateur enregistré avec succès.' });
+    // Message d'accueil
+    const welcomeMessage = `
+      Fermez les yeux,
+      Vous la voyez, cette lumière étrange, 
+      Vous y êtes dans ce couloir, et l'odeur du lino vous emplit les narines,
+      C'est déjà l'été, et le bitume chaud vous brûle, avant la fin des cours,
+      Et puis l'hiver est là, et de la lumière feutrée s'échappe des fenêtres intimes par cette nuit glacée,
+      Vous voilà de retour,
+
+      Bienvenue.
+    `;
+
+    // Envoi de l'email de bienvenue
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Bienvenue chez nous !',
+      text: welcomeMessage,
+    });
+
+    res.status(201).json({ message: 'Utilisateur enregistré avec succès et email de bienvenue envoyé.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur lors de l'enregistrement." });
@@ -63,7 +86,7 @@ router.post('/login', async (req, res) => {
     // Génération du token JWT
     const token = jwt.sign(
       { id: user._id, email: user.email },
-      'secret_key',
+      JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -98,11 +121,11 @@ router.post('/forgot-password', async (req, res) => {
     );
 
     // Lien de réinitialisation
-    const resetLink = `http://localhost:3000/reset-password/${resetToken}`;
+    const resetLink = `${FRONTEND_URL}/reset-password/${resetToken}`;
 
     // Envoi de l'email
     await transporter.sendMail({
-      from: 'juliengrange.dev@gmail.com',
+      from: process.env.EMAIL_USER,
       to: user.email,
       subject: 'Réinitialisation de votre mot de passe',
       text: `Cliquez sur ce lien pour réinitialiser votre mot de passe : ${resetLink}`,
@@ -111,13 +134,12 @@ router.post('/forgot-password', async (req, res) => {
     res.json({ message: 'Email de réinitialisation envoyé avec succès.' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Erreur lors de l'envoi de l'emailvvv." });
+    res.status(500).json({ error: "Erreur lors de l'envoi de l'email." });
   }
 });
 
 // Reset Password Route
 router.post('/reset-password/:token', async (req, res) => {
-  console.log('Route /forgot-password atteinte');
   try {
     const { token } = req.params;
     const { newPassword } = req.body;
