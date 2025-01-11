@@ -9,6 +9,10 @@ const PhotoSchema = new mongoose.Schema({
     type: String,
     required: [true, 'L\'URL de l\'image est obligatoire.'],
   },
+  public_id: {
+    type: String,
+    required: [true, 'L\'identifiant public Cloudinary est obligatoire.'],
+  },
   cameraType: {
     type: String,
     default: 'Non spécifié',
@@ -31,6 +35,5 @@ const PhotoSchema = new mongoose.Schema({
     required: [true, 'L\'ID de l\'utilisateur est obligatoire.'],
   },
 });
-
 
 module.exports = mongoose.model('Photo', PhotoSchema);

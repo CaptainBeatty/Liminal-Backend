@@ -1,33 +1,46 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const authenticate = require('../middleware/authenticate'); // Middleware d'authentification
 const Photo = require('../models/Photo');
 const dayjs = require('dayjs');
 const customParseFormat = require('dayjs/plugin/customParseFormat');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+require('dotenv').config();
 
 dayjs.extend(customParseFormat);
 
-const router = express.Router();
+// Configuration Cloudinary
 
-// Configuration de multer pour gérer les fichiers uploadés
-const multer = require('multer');
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
+console.log('Cloudinary Config Test:', {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Configuration de Multer pour Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'mern-multer-app', // Dossier dans Cloudinary
+    allowed_formats: ['jpeg', 'png', 'jpg'], // Formats autorisés
   },
 });
 const upload = multer({ storage });
+
+const router = express.Router();
 
 // **Route POST : Ajouter une image**
 router.post('/', authenticate, upload.single('image'), async (req, res) => {
   try {
     const { title, cameraType, date } = req.body;
 
-    // Validation des champs requis
     if (!title || !date || !req.file) {
       return res.status(400).json({ error: 'Les champs "title", "date" et "image" sont obligatoires.' });
     }
@@ -40,12 +53,12 @@ router.post('/', authenticate, upload.single('image'), async (req, res) => {
 
     const formattedDate = dayjs(date, ['YYYY-MM-DD', 'D MMMM YYYY'], true).format('D MMMM YYYY');
 
-    const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
     const newPhoto = new Photo({
       title,
       cameraType,
       date: formattedDate,
-      imageUrl,
+      imageUrl: req.file.path, // URL sécurisée de Cloudinary
+      public_id: req.file.filename, // Identifiant unique de Cloudinary
       userId: req.user.id, // Associer l'utilisateur connecté
     });
 
@@ -53,7 +66,7 @@ router.post('/', authenticate, upload.single('image'), async (req, res) => {
     res.status(201).json(newPhoto);
   } catch (err) {
     console.error('Erreur lors de l\'ajout de la photo :', err);
-    res.status(500).json({ error: 'Erreur lors de l\'ajout de la photo' });
+    res.status(500).json({ error: 'Erreur lors de l\'ajout de la photo.' });
   }
 });
 
@@ -70,7 +83,7 @@ router.get('/', async (req, res) => {
     res.status(200).json(formattedPhotos);
   } catch (err) {
     console.error('Erreur lors de la récupération des photos :', err);
-    res.status(500).json({ error: 'Erreur lors de la récupération des photos' });
+    res.status(500).json({ error: 'Erreur lors de la récupération des photos.' });
   }
 });
 
@@ -109,16 +122,14 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Accès interdit : Vous n\'êtes pas le propriétaire de cette image' });
     }
 
-    const filePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    // Supprimer l'image de Cloudinary
+    await cloudinary.uploader.destroy(photo.public_id);
 
     await Photo.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: 'Photo supprimée avec succès' });
+    res.status(200).json({ message: 'Photo supprimée avec succès.' });
   } catch (err) {
     console.error('Erreur lors de la suppression de la photo :', err);
-    res.status(500).json({ error: 'Erreur lors de la suppression de la photo' });
+    res.status(500).json({ error: 'Erreur lors de la suppression de la photo.' });
   }
 });
 
@@ -148,14 +159,17 @@ router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
     }
 
     if (req.file) {
-      const oldFilePath = path.join(__dirname, '..', 'uploads', path.basename(photo.imageUrl));
-      if (fs.existsSync(oldFilePath)) {
-        fs.unlinkSync(oldFilePath);
-      }
-      photo.imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
-    }
+      // Supprimer l'ancienne image de Cloudinary
+      await cloudinary.uploader.destroy(photo.public_id);
 
-    
+      // Uploader la nouvelle image
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: 'mern-multer-app',
+      });
+
+      photo.imageUrl = uploadResult.secure_url;
+      photo.public_id = uploadResult.public_id;
+    }
 
     await photo.save();
     res.status(200).json(photo);
