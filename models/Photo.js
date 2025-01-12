@@ -17,6 +17,10 @@ const PhotoSchema = new mongoose.Schema({
     type: String,
     default: 'Non spécifié',
   },
+  location: { // Nouveau champ pour le lieu
+    type: String,
+    required: [true, 'Le lieu est obligatoire.'],
+  },
   date: {
     type: String,
     required: [true, 'La date de prise de vue est obligatoire.'],
@@ -29,6 +33,7 @@ const PhotoSchema = new mongoose.Schema({
       message: 'Le format de la date est invalide. Utilisez "4 juillet 1985".',
     },
   },
+  
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

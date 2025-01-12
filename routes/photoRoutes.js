@@ -39,10 +39,10 @@ const router = express.Router();
 // **Route POST : Ajouter une image**
 router.post('/', authenticate, upload.single('image'), async (req, res) => {
   try {
-    const { title, cameraType, date } = req.body;
+    const { title, cameraType, date, location } = req.body;
 
-    if (!title || !date || !req.file) {
-      return res.status(400).json({ error: 'Les champs "title", "date" et "image" sont obligatoires.' });
+    if (!title || !date || !req.file || !location) {
+      return res.status(400).json({ error: 'Les champs "title", "date", "lieu" et "image" sont obligatoires.' });
     }
 
     // Validation et conversion de la date
@@ -56,6 +56,7 @@ router.post('/', authenticate, upload.single('image'), async (req, res) => {
     const newPhoto = new Photo({
       title,
       cameraType,
+      location, // Ajout du lieu
       date: formattedDate,
       imageUrl: req.file.path, // URL sécurisée de Cloudinary
       public_id: req.file.filename, // Identifiant unique de Cloudinary
@@ -136,7 +137,7 @@ router.delete('/:id', authenticate, async (req, res) => {
 // **Route PUT : Mettre à jour une photo**
 router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
   try {
-    const { title, cameraType, date } = req.body;
+    const { title, cameraType, date, location } = req.body;
     const photo = await Photo.findById(req.params.id);
 
     if (!photo) {
@@ -149,6 +150,7 @@ router.put('/:id', authenticate, upload.single('image'), async (req, res) => {
 
     if (title) photo.title = title;
     if (cameraType) photo.cameraType = cameraType;
+    if (location) photo.location = location; // Mise à jour du lieu
 
     if (date) {
       const isValidDate = dayjs(date, ['YYYY-MM-DD', 'D MMMM YYYY'], true).isValid();
