@@ -41,14 +41,13 @@ router.post('/register', async (req, res) => {
 
     // Message d'accueil
     const welcomeMessage = `
-      Fermez les yeux,
-      Vous la voyez, cette lumière étrange, 
-      Vous y êtes dans ce couloir, et l'odeur du lino vous emplit les narines,
+      
+      Vous la reconnaissez, cette lumière étrange, 
+      Vous y êtes dans ce couloir, de votre lycée, et l'odeur du lino vous emplit les narines,
       C'est déjà l'été, et le bitume chaud vous brûle, avant la fin des cours,
       Et puis l'hiver est là, et de la lumière feutrée s'échappe des fenêtres intimes par cette nuit glacée,
-      Vous voilà de retour,
-
-      Bienvenue.
+      ,
+      Bienvenue.sur Liminal,
     `;
 
     // Envoi de l'email de bienvenue
