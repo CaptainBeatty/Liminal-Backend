@@ -11,7 +11,6 @@ require('dotenv').config();
 dayjs.extend(customParseFormat);
 
 // Configuration Cloudinary
-
 console.log('Cloudinary Config Test:', {
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -35,6 +34,96 @@ const storage = new CloudinaryStorage({
 const upload = multer({ storage });
 
 const router = express.Router();
+
+// **Route POST : Ajouter un like**
+router.post('/:id/like', authenticate, async (req, res) => {
+  try {
+    const photo = await Photo.findById(req.params.id);
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo non trouvée.' });
+    }
+
+    const userId = req.user.id;
+
+    // Initialise les champs s'ils sont undefined
+    photo.likedBy = photo.likedBy || [];
+    photo.dislikedBy = photo.dislikedBy || [];
+
+    const alreadyLiked = photo.likedBy.includes(userId);
+    const alreadyDisliked = photo.dislikedBy.includes(userId);
+
+    if (alreadyLiked) {
+      // Annule le like
+      photo.likes -= 1;
+      photo.likedBy = photo.likedBy.filter((id) => id !== userId);
+    } else {
+      // Ajoute un like
+      if (alreadyDisliked) {
+        // Annule le dislike si présent
+        photo.dislikes -= 1;
+        photo.dislikedBy = photo.dislikedBy.filter((id) => id !== userId);
+      }
+      photo.likes += 1;
+      photo.likedBy.push(userId);
+    }
+
+    await photo.save();
+
+    res.status(200).json({
+      message: alreadyLiked ? 'Like annulé.' : 'Like ajouté.',
+      likes: photo.likes,
+      dislikes: photo.dislikes,
+    });
+  } catch (err) {
+    console.error('Erreur lors du like :', err);
+    res.status(500).json({ error: 'Erreur lors du like.' });
+  }
+});
+
+// **Route POST : Ajouter un dislike**
+router.post('/:id/dislike', authenticate, async (req, res) => {
+  try {
+    const photo = await Photo.findById(req.params.id);
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo non trouvée.' });
+    }
+
+    const userId = req.user.id;
+
+    // Initialise les champs s'ils sont undefined
+    photo.likedBy = photo.likedBy || [];
+    photo.dislikedBy = photo.dislikedBy || [];
+
+    const alreadyLiked = photo.likedBy.includes(userId);
+    const alreadyDisliked = photo.dislikedBy.includes(userId);
+
+    if (alreadyDisliked) {
+      // Annule le dislike
+      photo.dislikes -= 1;
+      photo.dislikedBy = photo.dislikedBy.filter((id) => id !== userId);
+    } else {
+      // Ajoute un dislike
+      if (alreadyLiked) {
+        // Annule le like si présent
+        photo.likes -= 1;
+        photo.likedBy = photo.likedBy.filter((id) => id !== userId);
+      }
+      photo.dislikes += 1;
+      photo.dislikedBy.push(userId);
+    }
+
+    await photo.save();
+
+    res.status(200).json({
+      message: alreadyDisliked ? 'Dislike annulé.' : 'Dislike ajouté.',
+      likes: photo.likes,
+      dislikes: photo.dislikes,
+    });
+  } catch (err) {
+    console.error('Erreur lors du dislike :', err);
+    res.status(500).json({ error: 'Erreur lors du dislike.' });
+  }
+});
 
 // **Route POST : Ajouter une image**
 router.post('/', authenticate, upload.single('image'), async (req, res) => {
@@ -108,6 +197,42 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('Erreur lors de la récupération de la photo :', err);
     res.status(500).json({ error: 'Erreur lors de la récupération de la photo.' });
+  }
+});
+
+// **Route POST : Ajouter un like**
+router.post('/:id/like', async (req, res) => {
+  try {
+    const photo = await Photo.findById(req.params.id);
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo non trouvée.' });
+    }
+
+    photo.likes += 1;
+    await photo.save();
+
+    res.status(200).json({ message: 'Like ajouté.', likes: photo.likes });
+  } catch (err) {
+    console.error('Erreur lors de l\'ajout du like :', err);
+    res.status(500).json({ error: 'Erreur lors de l\'ajout du like.' });
+  }
+});
+
+// **Route POST : Ajouter un dislike**
+router.post('/:id/dislike', async (req, res) => {
+  try {
+    const photo = await Photo.findById(req.params.id);
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo non trouvée.' });
+    }
+
+    photo.dislikes += 1;
+    await photo.save();
+
+    res.status(200).json({ message: 'Dislike ajouté.', dislikes: photo.dislikes });
+  } catch (err) {
+    console.error('Erreur lors de l\'ajout du dislike :', err);
+    res.status(500).json({ error: 'Erreur lors de l\'ajout du dislike.' });
   }
 });
 

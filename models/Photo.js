@@ -39,6 +39,17 @@ const PhotoSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, 'L\'ID de l\'utilisateur est obligatoire.'],
   },
+
+  likes: { 
+    type: Number, default: 0 
+  },
+  
+  
+  dislikes: { 
+    type: Number, default: 0 
+  },
+  likedBy: { type: [String], default: [] }, // Liste des IDs des utilisateurs ayant liké
+  dislikedBy: { type: [String], default: [] }, // Liste des IDs des utilisateurs ayant disliké
 });
 
 module.exports = mongoose.model('Photo', PhotoSchema);
