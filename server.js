@@ -6,6 +6,9 @@ const bodyParser = require('body-parser');
 
 const photoRoutes = require('./routes/photoRoutes');
 const authRoutes = require('./routes/authRoutes');
+const commentRoutes = require('./routes/commentRoutes');
+
+
 
 dotenv.config();
 
@@ -30,6 +33,7 @@ app.use(bodyParser.json());
 // Routes API
 app.use('/api/photos', photoRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/comments', commentRoutes);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, {})
