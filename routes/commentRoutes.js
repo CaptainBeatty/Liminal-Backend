@@ -12,6 +12,7 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Les champs "photoId" et "content" sont obligatoires.' });
     }
 
+    // Création du commentaire
     const newComment = new Comment({
       photoId,
       userId: req.user.id,
@@ -19,9 +20,13 @@ router.post('/', authenticate, async (req, res) => {
       parentId: parentId || null, // Null si pas de parent (commentaire principal)
     });
 
+    // Sauvegarde du commentaire
     await newComment.save();
 
-    res.status(201).json(newComment);
+    // Popule le champ `userId` pour inclure les informations utilisateur
+    const populatedComment = await newComment.populate('userId', 'username');
+
+    res.status(201).json(populatedComment); // Retourne le commentaire avec l'utilisateur peuplé
   } catch (err) {
     console.error('Erreur lors de l\'ajout du commentaire :', err);
     res.status(500).json({ error: 'Erreur lors de l\'ajout du commentaire.' });
@@ -30,7 +35,6 @@ router.post('/', authenticate, async (req, res) => {
 
 // **Route GET : Récupérer les commentaires pour une photo**
 router.get('/:photoId', async (req, res) => {
-  console.log('Requête reçue pour photo ID :', req.params.id);
   try {
     const comments = await Comment.find({ photoId: req.params.photoId })
       .populate('userId', 'username') // Récupère les informations de l'utilisateur
@@ -67,7 +71,10 @@ router.put('/:id', authenticate, async (req, res) => {
 
     await comment.save();
 
-    res.status(200).json(comment);
+    // Popule les informations utilisateur
+    const populatedComment = await comment.populate('userId', 'username _id');
+
+    res.status(200).json(populatedComment);
   } catch (err) {
     console.error('Erreur lors de la modification du commentaire :', err);
     res.status(500).json({ error: 'Erreur lors de la modification du commentaire.' });
