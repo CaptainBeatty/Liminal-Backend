@@ -32,6 +32,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Cet utilisateur existe déjà.' });
     }
 
+    // Vérification par username
+    const existingUserByUsername = await User.findOne({ username });
+    if (existingUserByUsername) {
+      return res.status(400).json({ error: "Ce nom d'utilisateur est déjà pris." });
+    }
+
     // Hachage du mot de passe
     const hashedPassword = await bcrypt.hash(password, 10);
 
