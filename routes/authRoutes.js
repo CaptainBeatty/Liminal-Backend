@@ -26,6 +26,10 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    }
+
     // Vérification si l'utilisateur existe déjà
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -92,7 +96,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { id: user._id, email: user.email },
       JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '12h' }
     );
 
     // Retourner le token et le nom d'utilisateur
@@ -148,6 +152,10 @@ router.post('/reset-password/:token', async (req, res) => {
   try {
     const { token } = req.params;
     const { newPassword } = req.body;
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    }
 
     // Vérification du token
     const decoded = jwt.verify(token, RESET_SECRET);
