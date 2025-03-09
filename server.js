@@ -39,6 +39,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/comments', commentRoutes);
 app.use("/api", contactRoutes);
 
+
+
 // MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, {})
   .then(() => console.log('Connexion à MongoDB réussie'))

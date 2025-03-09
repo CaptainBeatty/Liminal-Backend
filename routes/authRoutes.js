@@ -3,9 +3,19 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const User = require('../models/User');
+const Photo = require('../models/Photo');
+const Comment = require('../models/Comment');
+const authenticate = require('../middleware/authenticate'); // votre middleware
 require('dotenv').config(); // Charger les variables d'environnement
+const cloudinary = require('cloudinary').v2;
 
 const router = express.Router();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // Configurer Nodemailer avec les variables d'environnement
 const transporter = nodemailer.createTransport({
@@ -178,4 +188,100 @@ router.post('/reset-password/:token', async (req, res) => {
   }
 });
 
+router.put('/update-email', authenticate, async (req, res) => {
+  try {
+    // Récupère l'ID utilisateur depuis le token (injection faite par le middleware)
+    const userId = req.user.id;    
+    // Récupère la nouvelle adresse email depuis le body
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "L'email est requis." });
+    }
+
+    // Vérifier que l'email n'est pas déjà pris (facultatif mais bonne pratique)
+    const existingUser = await User.findOne({ email });
+    if (existingUser && existingUser._id.toString() !== userId) {
+      return res.status(400).json({ error: "Email already used" });
+    }
+
+    // Mettre à jour l’email de l’utilisateur
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Utilisateur introuvable." });
+    }
+    user.email = email;
+    await user.save();
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email, // nouvelle adresse
+      subject: 'Email changed successfully',
+      text: 'Glad to see you again. Your email has been successfully changed.',
+    });
+
+    return res.status(200).json({ message: 'Email mis à jour avec succès.' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erreur lors de la mise à jour de l'email." });
+  }
+});
+
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    // Depuis le middleware, on a : req.user.id
+    const user = await User.findById(req.user.id).select('-password'); // on exclut le mdp
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    }
+    // renvoyer tout ou partie des infos
+    res.json({ 
+      email: user.email,
+      username: user.username
+      // ...
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erreur lors de la récupération du profil.' });
+  }
+});
+
+// Suppression du compte
+router.delete('/delete-account', authenticate, async (req, res) => {
+  try {
+    // 1. Récupère l'ID utilisateur à partir du token
+    const userId = req.user.id;
+
+    // 2. Trouver toutes les photos de l'utilisateur
+    const userPhotos = await Photo.find({ userId: userId });
+
+    // 3. Supprimer chaque photo de Cloudinary
+    for (const photo of userPhotos) {
+      if (photo.public_id) {
+        try {
+          await cloudinary.uploader.destroy(photo.public_id);
+        } catch (err) {
+          console.error('Erreur Cloudinary pour la photo', photo._id, err);
+          // On continue malgré tout, mais vous pouvez gérer l'erreur différemment si besoin
+        }
+      }
+    }
+
+    // 4. Supprimer toutes les photos en base
+    await Photo.deleteMany({ userId: userId });
+
+    // 5. Supprimer tous les commentaires de l’utilisateur
+    await Comment.deleteMany({ userId: userId });
+
+    // 6. Supprimer l'utilisateur lui-même
+    await User.findByIdAndDelete(userId);
+
+    return res.status(200).json({ message: 'Compte et données supprimés avec succès.' });
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: 'Erreur lors de la suppression du compte.' });
+  }
+});
 module.exports = router;
